@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { DailyStat } from '@/lib/api';
+import { DailyStat } from '../../lib/api';
 
 interface SpendingChartProps {
   data: DailyStat[];

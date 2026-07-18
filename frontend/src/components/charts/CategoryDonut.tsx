@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CategoryStat } from '@/lib/api';
+import { CategoryStat } from '../../lib/api';
 
 interface CategoryDonutProps {
   data: CategoryStat[];

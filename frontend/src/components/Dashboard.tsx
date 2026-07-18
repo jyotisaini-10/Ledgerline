@@ -9,11 +9,11 @@ import {
   transactions as txApi, ml, seed,
   Transaction, Alert, MoneyLeak, ModelStats, ModelPerformance,
   RetrainDiff, DailyStat, CategoryStat, Feedback,
-} from '@/lib/api';
-import { useSSE, SSEAlert } from '@/lib/useSSE';
-import SpendingChart from '@/components/charts/SpendingChart';
-import CategoryDonut from '@/components/charts/CategoryDonut';
-import ConfidenceMeter from '@/components/ConfidenceMeter';
+} from '../lib/api';
+import { useSSE, SSEAlert } from '../lib/useSSE';
+import SpendingChart from './charts/SpendingChart';
+import CategoryDonut from './charts/CategoryDonut';
+import ConfidenceMeter from './ConfidenceMeter';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const D = {

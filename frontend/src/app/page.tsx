@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { auth } from '@/lib/api';
+import { auth } from '../lib/api';
 import { TrendingUp, ArrowRight } from 'lucide-react';
-import Dashboard from '@/components/Dashboard';
+import Dashboard from '../components/Dashboard';
 
 type AuthTab = 'login' | 'register';
 
