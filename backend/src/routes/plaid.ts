@@ -68,10 +68,12 @@ router.post('/exchange-token', authenticateToken, async (req: any, res) => {
     const itemResponse = await plaidClient!.itemGet({ access_token });
     const institution_name = itemResponse.data.item.institution_id || 'Unknown';
 
-    const db = (await import('../db')).default;
-    db.prepare(
-      'INSERT INTO plaid_items (user_id, item_id, access_token, institution_name) VALUES (?, ?, ?, ?) ON CONFLICT (item_id) DO UPDATE SET access_token = excluded.access_token, updated_at = CURRENT_TIMESTAMP'
-    ).run(userId, item_id, access_token, institution_name);
+    await query(
+      `INSERT INTO plaid_items (user_id, item_id, access_token, institution_name) 
+       VALUES ($1, $2, $3, $4) 
+       ON CONFLICT (item_id) DO UPDATE SET access_token = excluded.access_token, updated_at = CURRENT_TIMESTAMP`,
+      [userId, item_id, access_token, institution_name]
+    );
 
     res.json({ message: 'Token exchanged successfully' });
   } catch (error) {
@@ -86,17 +88,10 @@ router.post('/sync-transactions', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
 
-    const itemsResult = query('SELECT access_token FROM plaid_items WHERE user_id = ?', [userId]);
+    const itemsResult = await query('SELECT access_token FROM plaid_items WHERE user_id = $1', [userId]);
     if (itemsResult.rows.length === 0) {
       return res.status(400).json({ error: 'No linked bank accounts. Connect via Plaid or use /api/seed.' });
     }
-
-    const db = (await import('../db')).default;
-    const insertStmt = db.prepare(`
-      INSERT INTO transactions (user_id, plaid_transaction_id, amount, currency, merchant_name, category, date, description)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (plaid_transaction_id) DO NOTHING
-    `);
 
     let totalCount = 0;
     for (const item of itemsResult.rows as any[]) {
@@ -111,15 +106,20 @@ router.post('/sync-transactions', authenticateToken, async (req: any, res) => {
       });
 
       for (const tx of txResponse.data.transactions) {
-        insertStmt.run(
-          userId,
-          tx.transaction_id,
-          tx.amount,
-          tx.iso_currency_code || 'USD',
-          tx.merchant_name || tx.name,
-          tx.category ? tx.category[0] : null,
-          tx.date,
-          tx.name
+        await query(
+          `INSERT INTO transactions (user_id, plaid_transaction_id, amount, currency, merchant_name, category, date, description)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (plaid_transaction_id) DO NOTHING`,
+          [
+            userId,
+            tx.transaction_id,
+            tx.amount,
+            tx.iso_currency_code || 'USD',
+            tx.merchant_name || tx.name,
+            tx.category ? tx.category[0] : null,
+            tx.date,
+            tx.name
+          ]
         );
         totalCount++;
       }

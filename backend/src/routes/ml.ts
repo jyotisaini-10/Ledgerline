@@ -18,8 +18,8 @@ router.post('/analyze', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
 
-    const transactionsResult = query(
-      'SELECT * FROM transactions WHERE user_id = ? ORDER BY date DESC',
+    const transactionsResult = await query(
+      'SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC',
       [userId]
     );
     const transactions = transactionsResult.rows as any[];
@@ -36,70 +36,66 @@ router.post('/analyze', authenticateToken, async (req: any, res) => {
     // ── Subscription detection ────────────────────────────────────────────────
     const subscriptionResults = await detectSubscriptions(transactions);
 
-    const db = (await import('../db')).default;
-
-    const updateSubStmt = db.prepare(`
-      UPDATE transactions 
-      SET is_subscription = ?, subscription_confidence = ?, ml_signals = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND user_id = ?
-    `);
-
     for (const result of subscriptionResults) {
-      updateSubStmt.run(
-        result.is_subscription ? 1 : 0,
-        result.confidence,
-        JSON.stringify(result.signals),
-        result.transaction_id,
-        userId
+      await query(
+        `UPDATE transactions 
+         SET is_subscription = $1, subscription_confidence = $2, ml_signals = $3, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $4 AND user_id = $5`,
+        [
+          result.is_subscription ? 1 : 0,
+          result.confidence,
+          JSON.stringify(result.signals),
+          result.transaction_id,
+          userId
+        ]
       );
     }
 
     // ── Anomaly detection ─────────────────────────────────────────────────────
     const anomalyResults = await detectAnomalies(transactions);
 
-    const updateAnomalyStmt = db.prepare(`
-      UPDATE transactions 
-      SET is_anomaly = ?, anomaly_score = ?, anomaly_confidence = ?, risk_level = ?, ml_signals = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND user_id = ?
-    `);
-
-    const insertAlertStmt = db.prepare(`
-      INSERT OR IGNORE INTO anomaly_alerts (user_id, transaction_id, alert_type, severity, message)
-      SELECT ?, ?, ?, ?, ?
-      WHERE NOT EXISTS (
-        SELECT 1 FROM anomaly_alerts 
-        WHERE transaction_id = ? AND user_id = ? AND alert_type = ?
-      )
-    `);
-
     let newAlertsCount = 0;
     for (const result of anomalyResults) {
-      updateAnomalyStmt.run(
-        result.is_anomaly ? 1 : 0,
-        result.anomaly_score,
-        result.confidence,
-        result.risk_level,
-        JSON.stringify(result.signals),
-        result.transaction_id,
-        userId
+      await query(
+        `UPDATE transactions 
+         SET is_anomaly = $1, anomaly_score = $2, anomaly_confidence = $3, risk_level = $4, ml_signals = $5, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $6 AND user_id = $7`,
+        [
+          result.is_anomaly ? 1 : 0,
+          result.anomaly_score,
+          result.confidence,
+          result.risk_level,
+          JSON.stringify(result.signals),
+          result.transaction_id,
+          userId
+        ]
       );
 
       if (result.is_anomaly && (result.risk_level === 'high' || result.risk_level === 'medium')) {
         const tx = transactions.find((t: any) => t.id === result.transaction_id);
         const alertType = result.risk_level === 'high' ? 'high_risk_anomaly' : 'anomaly_detected';
 
-        const insertResult = insertAlertStmt.run(
-          userId,
-          result.transaction_id,
-          alertType,
-          result.risk_level,
-          result.reason,
-          result.transaction_id,
-          userId,
-          alertType
+        const insertResult = await query(
+          `INSERT INTO anomaly_alerts (user_id, transaction_id, alert_type, severity, message)
+           SELECT $1, $2, $3, $4, $5
+           WHERE NOT EXISTS (
+             SELECT 1 FROM anomaly_alerts 
+             WHERE transaction_id = $6 AND user_id = $7 AND alert_type = $8
+           )
+           RETURNING id`,
+          [
+            userId,
+            result.transaction_id,
+            alertType,
+            result.risk_level,
+            result.reason,
+            result.transaction_id,
+            userId,
+            alertType
+          ]
         );
 
-        if (insertResult.changes > 0) {
+        if (insertResult.rowCount > 0) {
           newAlertsCount++;
           // Emit real-time alert
           emitAlert({
@@ -135,9 +131,9 @@ router.post('/analyze', authenticateToken, async (req: any, res) => {
 router.get('/subscriptions', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
-    const result = query(
+    const result = await query(
       `SELECT * FROM transactions 
-       WHERE user_id = ? AND is_subscription = 1 
+       WHERE user_id = $1 AND is_subscription = 1 
        ORDER BY subscription_confidence DESC`,
       [userId]
     );
@@ -152,9 +148,9 @@ router.get('/subscriptions', authenticateToken, async (req: any, res) => {
 router.get('/anomalies', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
-    const result = query(
+    const result = await query(
       `SELECT * FROM transactions 
-       WHERE user_id = ? AND is_anomaly = 1 
+       WHERE user_id = $1 AND is_anomaly = 1 
        ORDER BY anomaly_score DESC`,
       [userId]
     );
@@ -169,8 +165,8 @@ router.get('/anomalies', authenticateToken, async (req: any, res) => {
 router.get('/money-leaks', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
-    const result = query(
-      'SELECT * FROM transactions WHERE user_id = ? ORDER BY date DESC',
+    const result = await query(
+      'SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC',
       [userId]
     );
     const leaks = await detectMoneyLeaks(result.rows as any[]);
@@ -185,11 +181,11 @@ router.get('/money-leaks', authenticateToken, async (req: any, res) => {
 router.get('/alerts', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
-    const result = query(
+    const result = await query(
       `SELECT a.*, t.merchant_name, t.amount, t.date, t.category, t.ml_signals
        FROM anomaly_alerts a
        JOIN transactions t ON a.transaction_id = t.id
-       WHERE a.user_id = ?
+       WHERE a.user_id = $1
        ORDER BY a.created_at DESC
        LIMIT 50`,
       [userId]
@@ -206,12 +202,11 @@ router.put('/alerts/:id/read', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
-    const db = (await import('../db')).default;
-    const stmt = db.prepare(
-      'UPDATE anomaly_alerts SET is_read = 1 WHERE id = ? AND user_id = ?'
+    const result = await query(
+      'UPDATE anomaly_alerts SET is_read = 1 WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, userId]
     );
-    const result = stmt.run(id, userId);
-    if (result.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Alert not found' });
     }
     res.json({ message: 'Alert marked as read' });
@@ -225,11 +220,10 @@ router.put('/alerts/:id/read', authenticateToken, async (req: any, res) => {
 router.put('/alerts/read-all', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
-    const db = (await import('../db')).default;
-    const stmt = db.prepare(
-      'UPDATE anomaly_alerts SET is_read = 1 WHERE user_id = ?'
+    await query(
+      'UPDATE anomaly_alerts SET is_read = 1 WHERE user_id = $1',
+      [userId]
     );
-    stmt.run(userId);
     res.json({ message: 'All alerts marked as read' });
   } catch (error) {
     console.error('Error marking all alerts as read:', error);
@@ -241,8 +235,8 @@ router.put('/alerts/read-all', authenticateToken, async (req: any, res) => {
 router.get('/model-stats', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
-    const result = query(
-      'SELECT COUNT(*) as count FROM transactions WHERE user_id = ?',
+    const result = await query(
+      'SELECT COUNT(*) as count FROM transactions WHERE user_id = $1',
       [userId]
     );
     const count = (result.rows[0] as any)?.count || 0;
@@ -261,22 +255,22 @@ router.post('/feedback', authenticateToken, async (req: any, res) => {
     if (!transactionId || !['positive', 'negative'].includes(feedback)) {
       return res.status(400).json({ error: 'transactionId and feedback required' });
     }
-    const db = (await import('../db')).default;
-    db.exec(`
+    await query(`
       CREATE TABLE IF NOT EXISTS ml_feedback (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL,
         transaction_id INTEGER NOT NULL,
         feedback TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, transaction_id)
       )
-    `);
-    const stmt = db.prepare(`
-      INSERT OR REPLACE INTO ml_feedback (user_id, transaction_id, feedback)
-      VALUES (?, ?, ?)
-    `);
-    stmt.run(userId, transactionId, feedback);
+    `, []);
+    await query(
+      `INSERT INTO ml_feedback (user_id, transaction_id, feedback)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, transaction_id) DO UPDATE SET feedback = EXCLUDED.feedback, created_at = CURRENT_TIMESTAMP`,
+      [userId, transactionId, feedback]
+    );
     res.json({ message: 'Feedback recorded', transactionId, feedback });
   } catch (error) {
     console.error('Error recording feedback:', error);
@@ -288,18 +282,17 @@ router.post('/feedback', authenticateToken, async (req: any, res) => {
 router.get('/feedback', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
-    const db = (await import('../db')).default;
-    db.exec(`
+    await query(`
       CREATE TABLE IF NOT EXISTS ml_feedback (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL,
         transaction_id INTEGER NOT NULL,
         feedback TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, transaction_id)
       )
-    `);
-    const result = query('SELECT * FROM ml_feedback WHERE user_id = ?', [userId]);
+    `, []);
+    const result = await query('SELECT * FROM ml_feedback WHERE user_id = $1', [userId]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
@@ -310,8 +303,8 @@ router.get('/feedback', authenticateToken, async (req: any, res) => {
 router.post('/retrain', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
-    const countResult = query(
-      'SELECT COUNT(*) as count FROM transactions WHERE user_id = ?', [userId]
+    const countResult = await query(
+      'SELECT COUNT(*) as count FROM transactions WHERE user_id = $1', [userId]
     );
     const count = (countResult.rows[0] as any)?.count || 0;
     const beforeStats = getModelStats(0);
@@ -343,8 +336,8 @@ router.post('/retrain', authenticateToken, async (req: any, res) => {
 router.get('/performance', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
-    const result = query(
-      'SELECT COUNT(*) as count FROM transactions WHERE user_id = ? AND is_anomaly = 1',
+    const result = await query(
+      'SELECT COUNT(*) as count FROM transactions WHERE user_id = $1 AND is_anomaly = 1',
       [userId]
     );
     const support = Math.max((result.rows[0] as any)?.count || 0, 15);
@@ -366,10 +359,10 @@ router.get('/performance', authenticateToken, async (req: any, res) => {
 router.get('/export-anomalies', authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.userId;
-    const result = query(
+    const result = await query(
       `SELECT merchant_name, amount, date, category, risk_level, anomaly_score
        FROM transactions
-       WHERE user_id = ? AND is_anomaly = 1
+       WHERE user_id = $1 AND is_anomaly = 1
        ORDER BY date DESC`,
       [userId]
     );

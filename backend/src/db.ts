@@ -1,30 +1,24 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { Pool } from 'pg';
 
-const dbPath = path.join(__dirname, '../../fintech.db');
-const db = new Database(dbPath);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+});
 
-// Enable foreign keys and WAL mode for better concurrency
-db.pragma('foreign_keys = ON');
-db.pragma('journal_mode = WAL');
-
-// ── Typed synchronous query helper ──────────────────────────────────────────
+// ── Typed query helper ───────────────────────────────────────────────────────
 // Returns { rows, rowCount } to match the expected API surface throughout
-// the routes. All params use ? placeholders (SQLite style).
-export const query = (text: string, params?: any[]) => {
+// the routes. All params use $1, $2, etc. placeholders (PostgreSQL style).
+export const query = async (text: string, params?: any[]) => {
+  const start = Date.now();
   try {
-    const stmt = db.prepare(text);
-    if (text.trim().toUpperCase().startsWith('SELECT') || text.trim().toUpperCase().startsWith('WITH')) {
-      const result = params && params.length > 0 ? stmt.all(...params) : stmt.all();
-      return { rows: result as any[], rowCount: result.length };
-    } else {
-      const result = params && params.length > 0 ? stmt.run(...params) : stmt.run();
-      return { rows: [], rowCount: result.changes, lastInsertRowid: result.lastInsertRowid };
-    }
+    const result = await pool.query(text, params);
+    const duration = Date.now() - start;
+    console.log('Executed query', { text, duration, rows: result.rowCount });
+    return { rows: result.rows, rowCount: result.rowCount };
   } catch (error) {
     console.error('Database error:', error);
     throw error;
   }
 };
 
-export default db;
+export default pool;

@@ -118,8 +118,8 @@ router.post('/', authenticateToken, async (req: any, res) => {
     const userId = req.user.userId;
 
     // Clear previous seeded data
-    (query as any)('DELETE FROM anomaly_alerts WHERE user_id = ?', [userId]);
-    (query as any)('DELETE FROM transactions WHERE user_id = ?', [userId]);
+    await query('DELETE FROM anomaly_alerts WHERE user_id = $1', [userId]);
+    await query('DELETE FROM transactions WHERE user_id = $1', [userId]);
 
     const today = new Date();
     today.setHours(12, 0, 0, 0);
@@ -207,16 +207,13 @@ router.post('/', authenticateToken, async (req: any, res) => {
     }
 
     // ── Insert all rows ───────────────────────────────────────────────────────
-    const db = (await import('../db')).default;
-    const stmt = db.prepare(`
-      INSERT OR IGNORE INTO transactions 
-        (user_id, plaid_transaction_id, amount, currency, merchant_name, category, date, description)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertMany = db.transaction((txRows: any[]) => {
-      for (const row of txRows) {
-        stmt.run(
+    for (const row of rows) {
+      await query(
+        `INSERT INTO transactions 
+         (user_id, plaid_transaction_id, amount, currency, merchant_name, category, date, description)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (plaid_transaction_id) DO NOTHING`,
+        [
           row.user_id,
           row.plaid_transaction_id,
           row.amount,
@@ -225,11 +222,9 @@ router.post('/', authenticateToken, async (req: any, res) => {
           row.category,
           row.date,
           row.description
-        );
-      }
-    });
-
-    insertMany(rows);
+        ]
+      );
+    }
 
     res.json({
       message: 'Demo data seeded successfully',

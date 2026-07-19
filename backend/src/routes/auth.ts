@@ -15,7 +15,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user exists
-    const existingUser = query('SELECT id FROM users WHERE email = ?', [email]);
+    const existingUser = await query('SELECT id FROM users WHERE email = $1', [email]);
     if (existingUser.rows.length > 0) {
       return res.status(400).json({ error: 'User already exists' });
     }
@@ -25,11 +25,11 @@ router.post('/register', async (req, res) => {
     const password_hash = await bcrypt.hash(password, salt);
 
     // Create user
-    const db = (await import('../db')).default;
-    const stmt = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)');
-    const result = stmt.run(email, password_hash);
-
-    const user = query('SELECT id, email, created_at FROM users WHERE id = ?', [result.lastInsertRowid]).rows[0] as any;
+    const result = await query(
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at',
+      [email, password_hash]
+    );
+    const user = result.rows[0] as any;
 
     const token = jwt.sign(
       { userId: user.id, email: user.email },
@@ -57,7 +57,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const result = query('SELECT * FROM users WHERE email = ?', [email]);
+    const result = await query('SELECT * FROM users WHERE email = $1', [email]);
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
