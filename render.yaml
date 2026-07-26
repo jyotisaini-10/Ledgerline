@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: ledgerline-backend
+    env: node
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: DATABASE_URL
+        sync: false  # Use your existing Supabase DATABASE_URL
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: FRONTEND_URL
+        sync: false  # Add your Vercel frontend URL
+      - key: PLAID_CLIENT_ID
+        sync: false
+      - key: PLAID_SECRET
+        sync: false
+      - key: PLAID_ENV
+        value: sandbox
+      - key: PLAID_REDIRECT_URI
+        sync: false  # Add your Vercel frontend URL + /api/plaid/callback
+      - key: SUBSCRIPTION_CONFIDENCE_THRESHOLD
+        value: 0.7
+      - key: ANOMALY_CONFIDENCE_THRESHOLD
+        value: 0.8
