@@ -95,7 +95,7 @@ router.post('/analyze', authenticateToken, async (req: any, res) => {
           ]
         );
 
-        if (insertResult.rowCount > 0) {
+        if (insertResult.rowCount && insertResult.rowCount > 0) {
           newAlertsCount++;
           // Emit real-time alert
           emitAlert({
@@ -206,7 +206,7 @@ router.put('/alerts/:id/read', authenticateToken, async (req: any, res) => {
       'UPDATE anomaly_alerts SET is_read = 1 WHERE id = $1 AND user_id = $2 RETURNING id',
       [id, userId]
     );
-    if (result.rowCount === 0) {
+    if (!result.rowCount || result.rowCount === 0) {
       return res.status(404).json({ error: 'Alert not found' });
     }
     res.json({ message: 'Alert marked as read' });
