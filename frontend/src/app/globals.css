@@ -162,7 +162,7 @@ tr:hover td { background: rgba(0,0,0,0.013); }
   padding: 8px 16px;
   background: transparent;
   color: var(--navy);
-  border: 1px solid var(--divider);
+  border: 1px solid var(--rule);
   border-radius: 8px;
   font-family: var(--font-sans);
   font-size: 13px;
@@ -181,8 +181,8 @@ tr:hover td { background: rgba(0,0,0,0.013); }
   gap: 6px;
   padding: 6px 12px;
   background: transparent;
-  color: var(--text-sec);
-  border: 1px solid var(--divider);
+  color: var(--muted);
+  border: 1px solid var(--rule);
   border-radius: 6px;
   font-family: var(--font-sans);
   font-size: 12px;
@@ -190,7 +190,7 @@ tr:hover td { background: rgba(0,0,0,0.013); }
   cursor: pointer;
   transition: all 0.12s;
 }
-.btn-ghost:hover { color: var(--text); border-color: #C0BDB5; }
+.btn-ghost:hover { color: var(--ink); border-color: #C0BDB5; }
 .btn-ghost.active { color: var(--navy); border-color: var(--navy); background: rgba(34,48,74,0.06); }
 
 /* ── Risk badge ─────────────────────────────────── */

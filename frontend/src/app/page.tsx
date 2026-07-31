@@ -1,15 +1,15 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { auth } from '../lib/api';
-import { TrendingUp, ArrowRight } from 'lucide-react';
+import { TrendingUp, ArrowRight, RefreshCw, Zap, Droplets } from 'lucide-react';
 import Dashboard from '../components/Dashboard';
 
 type AuthTab = 'login' | 'register';
 
 const FEATURES = [
-  { icon: '↻', title: 'Subscription Detection', desc: 'MAD clustering across recurring merchant charges — finds monthly/annual billing automatically.' },
-  { icon: '⚡', title: 'Anomaly Detection', desc: 'Isolation Forest on per-category baselines with 6 signal layers including velocity and time-of-day.' },
-  { icon: '💧', title: 'Money Leak Detection', desc: 'Surfaces forgotten subscriptions and zombie recurring charges draining your account.' },
+  { icon: <RefreshCw size={16} strokeWidth={1.75} color="#22304A" />, title: 'Subscription Detection', desc: 'MAD clustering across recurring merchant charges — finds monthly/annual billing automatically.' },
+  { icon: <Zap       size={16} strokeWidth={1.75} color="#22304A" />, title: 'Anomaly Detection',       desc: 'Isolation Forest on per-category baselines with 6 signal layers including velocity and time-of-day.' },
+  { icon: <Droplets  size={16} strokeWidth={1.75} color="#22304A" />, title: 'Money Leak Detection',    desc: 'Surfaces forgotten subscriptions and zombie recurring charges draining your account.' },
 ];
 
 export default function AuthPage() {
@@ -95,7 +95,7 @@ export default function AuthPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {FEATURES.map((f, i) => (
             <div key={i} style={{ display: 'flex', gap: 14, padding: '14px 18px', background: '#F1F0EC', borderRadius: 10, alignItems: 'flex-start' }}>
-              <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0, marginTop: 1 }}>{f.icon}</span>
+              <span style={{ display: 'inline-flex', lineHeight: 1, flexShrink: 0, marginTop: 1 }}>{f.icon}</span>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#1C1C1A', marginBottom: 3 }}>{f.title}</div>
                 <div style={{ fontSize: 12, color: '#6B6A64', lineHeight: 1.55 }}>{f.desc}</div>
