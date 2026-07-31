@@ -1,15 +1,28 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { auth } from '../lib/api';
-import { TrendingUp, ArrowRight, RefreshCw, Zap, Droplets } from 'lucide-react';
+import { ArrowRight, RefreshCw, Zap, Droplets } from 'lucide-react';
 import Dashboard from '../components/Dashboard';
+import LedgerlineLogo from '../components/LedgerlineLogo';
 
 type AuthTab = 'login' | 'register';
 
 const FEATURES = [
-  { icon: <RefreshCw size={16} strokeWidth={1.75} color="#22304A" />, title: 'Subscription Detection', desc: 'MAD clustering across recurring merchant charges — finds monthly/annual billing automatically.' },
-  { icon: <Zap       size={16} strokeWidth={1.75} color="#22304A" />, title: 'Anomaly Detection',       desc: 'Isolation Forest on per-category baselines with 6 signal layers including velocity and time-of-day.' },
-  { icon: <Droplets  size={16} strokeWidth={1.75} color="#22304A" />, title: 'Money Leak Detection',    desc: 'Surfaces forgotten subscriptions and zombie recurring charges draining your account.' },
+  {
+    icon: <RefreshCw size={16} strokeWidth={1.75} color="#22304A" />,
+    title: 'Subscription Detection',
+    desc: 'MAD clustering across recurring merchant charges — finds monthly/annual billing automatically.',
+  },
+  {
+    icon: <Zap size={16} strokeWidth={1.75} color="#22304A" />,
+    title: 'Anomaly Detection',
+    desc: 'Isolation Forest on per-category baselines with 6 signal layers including velocity and time-of-day.',
+  },
+  {
+    icon: <Droplets size={16} strokeWidth={1.75} color="#22304A" />,
+    title: 'Money Leak Detection',
+    desc: 'Surfaces forgotten subscriptions and zombie recurring charges draining your account.',
+  },
 ];
 
 export default function AuthPage() {
@@ -55,8 +68,8 @@ export default function AuthPage() {
       localStorage.setItem('token', res.token);
       localStorage.setItem('userEmail', res.user.email);
       setIsAuthenticated(true);
-    } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Authentication failed');
     } finally {
       setLoading(false);
     }
@@ -74,11 +87,11 @@ export default function AuthPage() {
       <div style={{ flex: 1, padding: '52px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', borderRight: '1px solid #E4E2DC', overflow: 'hidden', background: '#FAF9F6' }}>
 
         {/* Brand mark */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 48 }}>
-          <TrendingUp size={22} color="#22304A" strokeWidth={2} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 52 }}>
+          <LedgerlineLogo size={32} />
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#1C1C1A', letterSpacing: '-0.02em' }}>Ledgerline</div>
-            <div style={{ fontSize: 11, color: '#6B6A64', marginTop: 1 }}>Applied ML for real money decisions</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#1C1C1A', letterSpacing: '-0.03em' }}>Ledgerline</div>
+            <div style={{ fontSize: 11, color: '#6B6A64', marginTop: 1, letterSpacing: '0.01em' }}>Applied ML for real money decisions</div>
           </div>
         </div>
 
@@ -87,7 +100,7 @@ export default function AuthPage() {
           Smarter than a<br />
           <span style={{ color: '#22304A' }}>basic tracker.</span>
         </h1>
-        <p style={{ fontSize: 16, color: '#6B6A64', lineHeight: 1.7, marginBottom: 44, maxWidth: 400 }}>
+        <p style={{ fontSize: 16, color: '#6B6A64', lineHeight: 1.7, marginBottom: 48, maxWidth: 400 }}>
           Detects subscriptions, money leaks, and anomalies automatically — trained ML models, not rules or prompts.
         </p>
 
@@ -123,7 +136,7 @@ export default function AuthPage() {
             {activeTab === 'login' ? 'Welcome back' : 'Create account'}
           </h2>
           <p style={{ fontSize: 13, color: '#6B6A64', marginBottom: 24, lineHeight: 1.5 }}>
-            {activeTab === 'login' ? 'Sign in to your dashboard' : 'Start detecting subscriptions & anomalies'}
+            {activeTab === 'login' ? 'Sign in to your Ledgerline dashboard' : 'Start detecting subscriptions & anomalies'}
           </p>
 
           <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

@@ -133,7 +133,7 @@ function runMigrations() {
 runMigrations();
 
 app.listen(PORT, () => {
-  console.log(`\n🚀 FinTech Intelligence API running on http://localhost:${PORT}`);
+  console.log(`\n🚀 LedgerLine API running on http://localhost:${PORT}`);
   console.log(`   Real-time SSE: http://localhost:${PORT}/api/events`);
   console.log(`   Health check:  http://localhost:${PORT}/health\n`);
 });

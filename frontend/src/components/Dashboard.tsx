@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard, ArrowLeftRight, RefreshCw, AlertTriangle,
   Bell, Brain, LogOut, Download, ThumbsUp, ThumbsDown,
-  RotateCcw, ChevronRight, TrendingUp, Activity,
+  RotateCcw, ChevronRight, Activity,
 } from 'lucide-react';
 import {
   transactions as txApi, ml, seed,
@@ -14,6 +14,7 @@ import { useSSE, SSEAlert } from '../lib/useSSE';
 import SpendingChart from './charts/SpendingChart';
 import CategoryDonut from './charts/CategoryDonut';
 import ConfidenceMeter from './ConfidenceMeter';
+import LedgerlineLogo from './LedgerlineLogo';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const D = {
@@ -52,11 +53,40 @@ interface Toast { id:number; type:'success'|'error'|'info'; msg:string }
 export interface SignalBreakdown { signal:string; weight:number; fired:boolean; description:string }
 function parseSignals(s?:string):SignalBreakdown[]{ try{return s?JSON.parse(s):[]}catch{return []} }
 
-function getExplanation(signals:SignalBreakdown[], risk:string):string{
-  const fired = signals.filter(s=>s.fired).sort((a,b)=>b.weight-a.weight);
-  if(!fired.length) return risk==='high'?'Highly isolated spending pattern (Isolation Forest)':'Spending deviates from your baseline';
+// ─── Explanation generator (specific, human-readable) ──────────────────────────
+function getExplanation(signals: SignalBreakdown[], risk: string, amount?: number, category?: string): string {
+  const fired = signals.filter(s => s.fired).sort((a, b) => b.weight - a.weight);
+  if (!fired.length) {
+    return risk === 'high'
+      ? 'Highly isolated spending pattern detected by Isolation Forest'
+      : 'Spending deviates from your historical baseline';
+  }
   const top = fired[0];
-  return top.description || top.signal.replace(/_/g,' ');
+  // Use backend description if it's specific (longer than a plain signal name)
+  if (top.description && top.description.length > 20 && !top.description.includes('_')) {
+    return top.description;
+  }
+  // Construct human-readable explanation from signal type
+  const amtStr = amount ? `$${amount.toFixed(2)}` : 'this charge';
+  const catStr = category || 'this category';
+  switch (top.signal) {
+    case 'global_amount_deviation':
+      return `${amtStr} is far above your global spending average`;
+    case 'category_amount_deviation':
+      return `${amtStr} is unusually high for ${catStr} based on your history`;
+    case 'isolation_forest_score':
+      return `Isolation Forest flagged this as a highly isolated data point`;
+    case 'same_day_velocity':
+      return `Multiple charges on the same day — unusually high velocity`;
+    case 'unusual_time':
+      return `Transaction occurred at an atypical time of day for you`;
+    case 'weekend_business':
+      return `Weekend charge from a typically weekday-only merchant`;
+    case 'new_merchant':
+      return `First-time charge from this merchant`;
+    default:
+      return top.description || top.signal.replace(/_/g, ' ');
+  }
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -78,17 +108,17 @@ function Spinner({dark=false}:{dark?:boolean}){
   return <span className={`spinner${dark?' spinner-dark':''}`}/>;
 }
 
-function Toast({t, onDismiss}:{t:Toast; onDismiss:()=>void}){
+function ToastItem({t, onDismiss}:{t:Toast; onDismiss:()=>void}){
   const c={success:D.teal, error:D.clay, info:D.navy}[t.type];
   return(
     <div className="toast" onClick={onDismiss} style={{cursor:'pointer',borderLeftColor:c,borderLeftWidth:3}}>
-      <span style={{color:c,fontSize:16}}>{t.type==='success'?'✓':t.type==='error'?'✕':'·'}</span>
+      <span style={{color:c,fontSize:15,fontWeight:700}}>{t.type==='success'?'✓':t.type==='error'?'✕':'·'}</span>
       <span style={{fontSize:13,color:D.ink}}>{t.msg}</span>
     </div>
   );
 }
 
-function Divider(){return <div style={{height:1,background:D.rule}}/>;}
+function Divider(){return <div style={{height:1,background:D.rule}}/>;  }
 
 function EmptyState({icon,title,sub}:{icon:React.ReactNode;title:string;sub:string}){
   return(
@@ -139,9 +169,10 @@ export default function Dashboard({userEmail}:{userEmail:string}){
       const fbMap:Record<number,'positive'|'negative'> = {};
       for(const f of (fb as Feedback[])) fbMap[f.transaction_id]=f.feedback;
       setFeedback(fbMap);
-    }catch(err:any){
-      if(!err.message?.includes('404')&&!err.message?.includes('500'))
-        toast('error','Cannot reach backend — is port 5000 running?');
+    }catch(err:unknown){
+      const msg = (err as Error).message || '';
+      if(!msg.includes('404')&&!msg.includes('500'))
+        toast('error','Cannot reach backend — is the API running?');
     }finally{ setLoading(false); }
   },[toast]);
 
@@ -163,7 +194,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
       const r=await ml.analyze();
       toast('success',`Analysis complete — ${r.subscriptions} subscriptions, ${r.anomalies} anomalies, ${r.new_alerts} new alerts`);
       await fetchAll();
-    }catch(err:any){toast('error',err.message||'Analysis failed');}
+    }catch(err:unknown){toast('error',(err as Error).message||'Analysis failed');}
     finally{setAnalyzing(false);}
   };
 
@@ -173,7 +204,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
       const r=await seed.load();
       toast('success',`Loaded ${r.transactions_inserted} transactions — click Run Analysis`);
       await fetchAll();
-    }catch(err:any){toast('error',err.message||'Seeding failed');}
+    }catch(err:unknown){toast('error',(err as Error).message||'Seeding failed');}
     finally{setSeeding(false);}
   };
 
@@ -184,7 +215,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
       setRetrainDiff(r.diff);
       toast('success','Retraining complete — see diff below');
       await fetchAll();
-    }catch(err:any){toast('error',err.message||'Retraining failed');}
+    }catch(err:unknown){toast('error',(err as Error).message||'Retraining failed');}
     finally{setRetraining(false);}
   };
 
@@ -193,7 +224,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
     try{
       await ml.feedback(txId,fb);
       setFeedback(p=>({...p,[txId]:fb}));
-      toast('success',`Feedback recorded — will inform future retraining`);
+      toast('success','Feedback recorded — will inform future retraining');
     }catch{ toast('error','Could not record feedback'); }
     finally{ setPendingFeedback(p=>({...p,[txId]:false})); }
   };
@@ -201,12 +232,11 @@ export default function Dashboard({userEmail}:{userEmail:string}){
   const exportCSV = ()=>{
     const token = localStorage.getItem('token');
     const url = ml.exportAnomaliesUrl();
-    const a = document.createElement('a');
-    a.href = url; a.download='flagged-transactions.csv';
-    // Attach auth via fetch+blob for authenticated download
     fetch(url,{headers:{'Authorization':`Bearer ${token}`}})
       .then(r=>r.blob()).then(b=>{
-        a.href=URL.createObjectURL(b); a.click();
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(b); a.download='ledgerline-flagged-transactions.csv';
+        a.click();
       }).catch(()=>toast('error','Export failed'));
   };
 
@@ -240,12 +270,13 @@ export default function Dashboard({userEmail}:{userEmail:string}){
     <div style={{display:'flex',minHeight:'100vh',background:D.bg,color:D.ink,fontFamily:"'Inter',-apple-system,BlinkMacSystemFont,sans-serif"}}>
 
       {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
-      <aside style={{width:200,background:'#fff',borderRight:`1px solid ${D.rule}`,display:'flex',flexDirection:'column',padding:'16px 10px',flexShrink:0}}>
-        <div style={{padding:'4px 6px 20px',display:'flex',alignItems:'center',gap:9}}>
-          <TrendingUp size={18} color={D.navy} strokeWidth={2}/>
+      <aside style={{width:212,background:'#fff',borderRight:`1px solid ${D.rule}`,display:'flex',flexDirection:'column',padding:'16px 10px',flexShrink:0}}>
+        {/* Logo + wordmark */}
+        <div style={{padding:'6px 6px 22px',display:'flex',alignItems:'center',gap:10}}>
+          <LedgerlineLogo size={26} />
           <div>
-            <div style={{fontSize:13,fontWeight:700,color:D.ink,letterSpacing:'-0.01em'}}>Ledgerline</div>
-            <div style={{fontSize:10,color:D.muted}}>Intelligence</div>
+            <div style={{fontSize:13,fontWeight:800,color:D.ink,letterSpacing:'-0.02em'}}>Ledgerline</div>
+            <div style={{fontSize:10,color:D.muted,letterSpacing:'0.01em'}}>ML Intelligence</div>
           </div>
         </div>
 
@@ -300,10 +331,10 @@ export default function Dashboard({userEmail}:{userEmail:string}){
               {/* Bare stats — no card containers */}
               <div style={{display:'flex',gap:0}}>
                 {[
-                  {label:'30-Day Spend',    val:fmt(totalSpent),        sub:`${daily.length} days tracked`,       color:D.ink},
-                  {label:'Subscriptions',   val:subs.length.toString(),  sub:`${new Set(subs.map(t=>t.merchant_name)).size} unique services`, color:D.teal},
-                  {label:'Anomalies',       val:anomalies.length.toString(), sub:`${anomalies.filter(t=>t.risk_level==='high').length} high risk`, color:D.clay},
-                  {label:'Money Leaks',     val:leaks.length.toString(), sub:leaks.length?`≈$${leaks.reduce((s,l)=>s+l.estimated_annual_cost,0).toFixed(0)}/yr wasted`:'All clear', color:D.muted},
+                  {label:'30-Day Spend',    val:fmt(totalSpent),              sub:`${daily.length} days tracked`,                                          color:D.ink},
+                  {label:'Subscriptions',   val:subs.length.toString(),        sub:`${new Set(subs.map(t=>t.merchant_name)).size} unique services`,          color:D.teal},
+                  {label:'Anomalies',       val:anomalies.length.toString(),   sub:`${anomalies.filter(t=>t.risk_level==='high').length} high risk`,          color:D.clay},
+                  {label:'Money Leaks',     val:leaks.length.toString(),       sub:leaks.length?`≈$${leaks.reduce((s,l)=>s+l.estimated_annual_cost,0).toFixed(0)}/yr wasted`:'All clear', color:D.muted},
                 ].map((s,i,arr)=>(
                   <div key={s.label} style={{flex:1,paddingRight:32,marginRight:32,borderRight:i<arr.length-1?`1px solid ${D.rule}`:'none'}}>
                     <div style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:D.muted,marginBottom:6}}>{s.label}</div>
@@ -334,14 +365,14 @@ export default function Dashboard({userEmail}:{userEmail:string}){
                   <div>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
                       <span style={{fontSize:14,fontWeight:700,color:D.ink}}>Recent Anomalies</span>
-                      <button onClick={()=>setTab('anomalies')} style={{fontSize:12,color:D.navy,background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:4,fontFamily:"inherit"}}>
+                      <button onClick={()=>setTab('anomalies')} style={{fontSize:12,color:D.navy,background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:4,fontFamily:'inherit'}}>
                         View all <ChevronRight size={13}/>
                       </button>
                     </div>
                     <div className="surface-group">
                       {anomalies.slice(0,4).map((tx,i)=>{
                         const sig=parseSignals(tx.ml_signals);
-                        const exp=getExplanation(sig,tx.risk_level);
+                        const exp=getExplanation(sig,tx.risk_level,tx.amount,tx.category);
                         return(
                           <div key={tx.id}>
                             {i>0&&<Divider/>}
@@ -441,7 +472,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
                     <div className="surface-group">
                       {[...new Map(subs.map(t=>[t.merchant_name,t])).values()]
                         .sort((a,b)=>b.subscription_confidence-a.subscription_confidence)
-                        .map((tx,i,arr)=>{
+                        .map((tx,i)=>{
                           const sigs=parseSignals(tx.ml_signals).filter(s=>s.fired);
                           return(
                             <div key={tx.id}>
@@ -502,7 +533,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span style={{fontSize:13,color:D.muted}}>{anomalies.length} flagged transactions</span>
                 {anomalies.length>0&&(
-                  <button className="btn-secondary" onClick={exportCSV}>
+                  <button className="btn-secondary" onClick={exportCSV} id="btn-export-anomalies">
                     <Download size={12} strokeWidth={2}/>Export CSV
                   </button>
                 )}
@@ -513,7 +544,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
                   <div className="surface-group">
                     {anomalies.sort((a,b)=>b.anomaly_score-a.anomaly_score).map((tx,i)=>{
                       const sigs=parseSignals(tx.ml_signals);
-                      const exp=getExplanation(sigs,tx.risk_level);
+                      const exp=getExplanation(sigs,tx.risk_level,tx.amount,tx.category);
                       const firedSigs=sigs.filter(s=>s.fired);
                       const fb=feedback[tx.id];
                       const pending=pendingFeedback[tx.id];
@@ -526,10 +557,10 @@ export default function Dashboard({userEmail}:{userEmail:string}){
                               <div style={{flex:1,minWidth:0}}>
                                 <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                                   <span style={{fontSize:14,fontWeight:700,color:D.ink}}>{tx.merchant_name||tx.category}</span>
-                                  <span className={`badge badge-risk`} style={{fontSize:10}}>{tx.risk_level}</span>
+                                  <span className="badge badge-risk" style={{fontSize:10}}>{tx.risk_level}</span>
                                   <span className="badge badge-muted" style={{fontSize:10}}>{tx.category}</span>
                                 </div>
-                                {/* Explanation line in clay */}
+                                {/* Specific explanation line in clay */}
                                 <div style={{fontSize:13,color:D.clay,marginTop:5,lineHeight:1.4}}>{exp}</div>
                                 <div style={{fontSize:11,color:D.muted,marginTop:3}}>{fmtD(tx.date)}</div>
                               </div>
@@ -539,21 +570,23 @@ export default function Dashboard({userEmail}:{userEmail:string}){
                               </div>
                             </div>
 
-                            {/* Row 2: signal badges + feedback */}
+                            {/* Row 2: signal badges + feedback controls */}
                             <div style={{display:'flex',alignItems:'center',gap:10,marginTop:10,flexWrap:'wrap'}}>
                               {firedSigs.slice(0,4).map((s,i)=>(
                                 <span key={i} className="badge badge-muted" style={{fontSize:10}}>{s.signal.replace(/_/g,' ')}</span>
                               ))}
                               <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
-                                <span style={{fontSize:11,color:D.muted}}>Was this actually unusual?</span>
+                                <span style={{fontSize:11,color:D.muted}}>Actually unusual?</span>
                                 <button
+                                  id={`feedback-yes-${tx.id}`}
                                   onClick={()=>!pending&&sendFeedback(tx.id,'negative')}
                                   disabled={!!pending}
-                                  title="Yes, unusual"
+                                  title="Yes, was unusual"
                                   style={{display:'flex',alignItems:'center',gap:4,padding:'4px 9px',borderRadius:6,border:`1px solid ${D.rule}`,background:fb==='negative'?D.clay:'transparent',color:fb==='negative'?'#fff':D.muted,cursor:'pointer',fontSize:11,fontWeight:500,fontFamily:'inherit',transition:'all 0.12s'}}>
                                   <ThumbsDown size={12} strokeWidth={2}/>Yes
                                 </button>
                                 <button
+                                  id={`feedback-no-${tx.id}`}
                                   onClick={()=>!pending&&sendFeedback(tx.id,'positive')}
                                   disabled={!!pending}
                                   title="Actually normal"
@@ -576,7 +609,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
             <div className="fade-up" style={{display:'flex',flexDirection:'column',gap:14}}>
               {alerts.length>0&&(
                 <div style={{display:'flex',justifyContent:'flex-end'}}>
-                  <button className="btn-ghost" onClick={markAllRead}>✓ Mark all read</button>
+                  <button className="btn-ghost" onClick={markAllRead}>Mark all read</button>
                 </div>
               )}
               {alerts.length===0
@@ -601,7 +634,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
                               <div style={{fontSize:11,color:D.muted,marginTop:4}}>{fmtD(al.created_at||al.date)} · {fmt(Number(al.amount))}</div>
                             </div>
                             {!al.is_read&&(
-                              <button className="btn-ghost" onClick={()=>markRead(al.id)} style={{flexShrink:0,fontSize:11}}>✓</button>
+                              <button className="btn-ghost" onClick={()=>markRead(al.id)} style={{flexShrink:0,fontSize:11}}>Read</button>
                             )}
                           </div>
                         </div>
@@ -614,12 +647,12 @@ export default function Dashboard({userEmail}:{userEmail:string}){
 
           {/* ══ ML MODEL ═══════════════════════════════════════════════════════ */}
           {tab==='model'&&(
-            <div className="fade-up" style={{display:'flex',flexDirection:'column',gap:28}}>
+            <div className="fade-up" style={{display:'flex',flexDirection:'column',gap:32}}>
               {!modelStats
                 ?<EmptyState icon={<Brain size={36}/>} title="No model data yet" sub="Load transactions and run analysis first."/>
                 :(
                   <>
-                    {/* Bare stats — no box containers */}
+                    {/* ── Bare stats — no box containers ─────────────────── */}
                     <div style={{display:'flex',gap:0}}>
                       {[
                         {label:'Training Samples',  val:modelStats.training_sample_size.toLocaleString(), color:D.ink},
@@ -635,21 +668,21 @@ export default function Dashboard({userEmail}:{userEmail:string}){
 
                     <Divider/>
 
-                    {/* Feature weights — two columns, no bars */}
+                    {/* ── Feature weights — normalized to 100%, no bars ─── */}
                     {(()=>{
                       const subW  = normalizeWeights(modelStats.feature_weights, SUB_KEYS);
                       const anoW  = normalizeWeights(modelStats.feature_weights, ANOMALY_KEYS);
                       return(
                         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:32}}>
                           {[
-                            {title:'Subscription Feature Weights',  weights:subW,  note:'sums to 100%'},
-                            {title:'Anomaly Signal Weights',        weights:anoW,  note:'normalized · sums to 100%'},
+                            {title:'Subscription Feature Weights', weights:subW,  note:'normalized · sums to 100%'},
+                            {title:'Anomaly Signal Weights',       weights:anoW,  note:'normalized · sums to 100%'},
                           ].map(section=>(
                             <div key={section.title}>
                               <div style={{fontSize:13,fontWeight:700,color:D.ink,marginBottom:2}}>{section.title}</div>
                               <div style={{fontSize:11,color:D.muted,marginBottom:14}}>{section.note}</div>
                               <div className="surface-group">
-                                {Object.entries(section.weights).sort((a,b)=>b[1]-a[1]).map(([k,v],i,arr)=>(
+                                {Object.entries(section.weights).sort((a,b)=>b[1]-a[1]).map(([k,v],i)=>(
                                   <div key={k}>
                                     {i>0&&<Divider/>}
                                     <div style={{display:'flex',justifyContent:'space-between',padding:'10px 14px',alignItems:'center'}}>
@@ -667,7 +700,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
 
                     <Divider/>
 
-                    {/* Model performance panel */}
+                    {/* ── Model performance panel ─────────────────────────── */}
                     <div>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
                         <div style={{fontSize:13,fontWeight:700,color:D.ink}}>Model Performance</div>
@@ -676,19 +709,19 @@ export default function Dashboard({userEmail}:{userEmail:string}){
                         </button>
                       </div>
                       {!perf?(
-                        <div style={{fontSize:13,color:D.muted,padding:'12px 0'}}>Click "Load metrics" to fetch evaluation results</div>
+                        <div style={{fontSize:13,color:D.muted,padding:'12px 0'}}>Click &ldquo;Load metrics&rdquo; to fetch evaluation results</div>
                       ):(
                         <>
-                          <div style={{fontSize:11,color:D.muted,marginBottom:14,padding:'6px 10px',background:D.surface,borderRadius:6,display:'inline-block'}}>
+                          <div style={{fontSize:11,color:D.muted,marginBottom:16,padding:'6px 10px',background:D.surface,borderRadius:6,display:'inline-block'}}>
                             ⓘ {perf.note}
                           </div>
                           <div style={{display:'flex',gap:0}}>
                             {[
-                              {label:'Precision',          val:`${(perf.precision*100).toFixed(1)}%`},
-                              {label:'Recall',             val:`${(perf.recall*100).toFixed(1)}%`},
-                              {label:'F1 Score',           val:`${(perf.f1_score*100).toFixed(1)}%`},
-                              {label:'False Positive Rate',val:`${(perf.false_positive_rate*100).toFixed(1)}%`},
-                              {label:'Support (samples)',  val:perf.support.toString()},
+                              {label:'Precision',           val:`${(perf.precision*100).toFixed(1)}%`},
+                              {label:'Recall',              val:`${(perf.recall*100).toFixed(1)}%`},
+                              {label:'F1 Score',            val:`${(perf.f1_score*100).toFixed(1)}%`},
+                              {label:'False Positive Rate', val:`${(perf.false_positive_rate*100).toFixed(1)}%`},
+                              {label:'Eval Samples',        val:perf.support.toString()},
                             ].map((m,i,arr)=>(
                               <div key={m.label} style={{paddingRight:24,marginRight:24,borderRight:i<arr.length-1?`1px solid ${D.rule}`:'none'}}>
                                 <div style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:D.muted,marginBottom:6}}>{m.label}</div>
@@ -702,10 +735,10 @@ export default function Dashboard({userEmail}:{userEmail:string}){
 
                     <Divider/>
 
-                    {/* Retrain */}
+                    {/* ── Retrain model ───────────────────────────────────── */}
                     <div>
                       <div style={{fontSize:13,fontWeight:700,color:D.ink,marginBottom:6}}>Retrain Model</div>
-                      <div style={{fontSize:13,color:D.muted,marginBottom:14}}>
+                      <div style={{fontSize:13,color:D.muted,marginBottom:16}}>
                         Re-runs training on current data. Shows a before/after diff of threshold changes.
                       </div>
                       <button className="btn-primary" onClick={runRetrain} disabled={retraining} id="btn-retrain">
@@ -713,11 +746,11 @@ export default function Dashboard({userEmail}:{userEmail:string}){
                         {retraining?'Retraining…':'Retrain Model'}
                       </button>
                       {retrainDiff&&(
-                        <div style={{marginTop:16,padding:'14px 18px',background:D.surface,borderRadius:8}}>
-                          <div style={{fontSize:12,fontWeight:700,color:D.ink,marginBottom:10}}>Before → After</div>
+                        <div style={{marginTop:16,padding:'16px 18px',background:D.surface,borderRadius:8}}>
+                          <div style={{fontSize:12,fontWeight:700,color:D.ink,marginBottom:12}}>Before → After</div>
                           <div style={{display:'flex',flexDirection:'column',gap:8}}>
                             {[
-                              {label:'Anomaly threshold', before:pct(retrainDiff.before.anomaly_threshold), after:pct(retrainDiff.after.anomaly_threshold)},
+                              {label:'Anomaly threshold', before:pct(retrainDiff.before.anomaly_threshold),      after:pct(retrainDiff.after.anomaly_threshold)},
                               {label:'Sub. threshold',    before:pct(retrainDiff.before.subscription_threshold), after:pct(retrainDiff.after.subscription_threshold)},
                               {label:'Training samples',  before:retrainDiff.before.training_sample_size.toString(), after:retrainDiff.after.training_sample_size.toString()},
                             ].map(row=>(
@@ -739,7 +772,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
 
                     <Divider/>
 
-                    {/* Algorithm explainer */}
+                    {/* ── Algorithm explainer ─────────────────────────────── */}
                     <div>
                       <div style={{fontSize:13,fontWeight:700,color:D.ink,marginBottom:16}}>How the Models Work</div>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
@@ -774,7 +807,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
                         ))}
                       </div>
                       {modelStats.last_trained&&(
-                        <div style={{marginTop:14,fontSize:12,color:D.muted}}>
+                        <div style={{marginTop:16,fontSize:12,color:D.muted}}>
                           Last trained: {new Date(modelStats.last_trained).toLocaleString()} · {modelStats.training_sample_size} transactions
                         </div>
                       )}
@@ -788,7 +821,7 @@ export default function Dashboard({userEmail}:{userEmail:string}){
 
       {/* Toast container */}
       <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,display:'flex',flexDirection:'column',gap:8}}>
-        {toasts.map(t=><Toast key={t.id} t={t} onDismiss={()=>setToasts(p=>p.filter(x=>x.id!==t.id))}/>)}
+        {toasts.map(t=><ToastItem key={t.id} t={t} onDismiss={()=>setToasts(p=>p.filter(x=>x.id!==t.id))}/>)}
       </div>
     </div>
   );

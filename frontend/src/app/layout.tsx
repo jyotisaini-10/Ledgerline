@@ -10,12 +10,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'FinTech Intelligence — Subscription & Anomaly Detection',
+  title: 'LedgerLine — Subscription & Anomaly Detection',
   description:
     'Automatically detect subscriptions, money leaks, and unusual spending with trained ML models — real applied machine learning, not LLM prompts.',
-  keywords: ['fintech', 'subscription detection', 'anomaly detection', 'machine learning', 'expense tracking'],
+  keywords: ['ledgerline', 'fintech', 'subscription detection', 'anomaly detection', 'machine learning', 'expense tracking'],
   openGraph: {
-    title: 'FinTech Intelligence',
+    title: 'LedgerLine',
     description: 'Smart subscription & anomaly detection powered by real ML models',
     type: 'website',
   },
