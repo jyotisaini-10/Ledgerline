@@ -27,7 +27,6 @@ export const metadata: Metadata = {
     apple: [
       { url: '/apple-touch-icon.png', sizes: '512x512', type: 'image/png' },
     ],
-    shortcut: '/favicon.svg',
   },
 
   // ── Open Graph ───────────────────────────────────────────────────────────────
