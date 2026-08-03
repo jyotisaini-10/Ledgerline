@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="7" fill="#22304A"/>
+  <!-- Vertical bar of the L -->
+  <rect x="7" y="6" width="5" height="17" rx="1.5" fill="#ffffff"/>
+  <!-- Horizontal base of the L -->
+  <rect x="7" y="19" width="15" height="4.5" rx="1.5" fill="#ffffff"/>
+  <!-- Hairline ledger rule across vertical bar -->
+  <rect x="7" y="13.5" width="14" height="1.2" rx="0.6" fill="#ffffff" opacity="0.4"/>
+  <!-- Trend dots (ascending) -->
+  <circle cx="24" cy="11" r="1.4" fill="#ffffff" opacity="0.7"/>
+  <circle cx="21.5" cy="13" r="1.4" fill="#ffffff" opacity="0.5"/>
+  <circle cx="19" cy="11.5" r="1.4" fill="#ffffff" opacity="0.35"/>
+</svg>
