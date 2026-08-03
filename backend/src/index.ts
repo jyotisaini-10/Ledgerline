@@ -14,13 +14,38 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? (process.env.FRONTEND_URL || '').split(',')
-  : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+// Accepts:
+//   • All *.vercel.app origins (covers preview deployments automatically)
+//   • Any explicit origins listed in FRONTEND_URL (comma-separated)
+//   • localhost in any environment
+const explicitOrigins: string[] = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map((s) => s.trim()).filter(Boolean)
+  : [];
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // Allow server-to-server / curl requests (no Origin header)
+      if (!origin) return callback(null, true);
+
+      // Always allow localhost
+      if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+        return callback(null, true);
+      }
+
+      // Allow any Vercel deployment (production + all preview branches)
+      if (origin.endsWith('.vercel.app')) {
+        return callback(null, true);
+      }
+
+      // Allow explicitly configured origins
+      if (explicitOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`CORS blocked origin: ${origin}`);
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     credentials: true,
   })
 );
@@ -85,18 +110,15 @@ app.get('/api/events', (req, res) => {
     'X-Accel-Buffering': 'no',
   });
 
-  // Send a heartbeat every 25 seconds to keep the connection alive
   const heartbeat = setInterval(() => {
     res.write(': heartbeat\n\n');
   }, 25000);
 
-  // Listen on the in-memory bus
   const onAlert = (data: object) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
   alertBus.on('alert', onAlert);
 
-  // If Redis is available, also subscribe via Redis pub/sub
   let subscriber: any = null;
   if (redisClient) {
     subscriber = redisClient.duplicate();
@@ -114,26 +136,9 @@ app.get('/api/events', (req, res) => {
   });
 });
 
-// ─── Schema migration (add ml_signals column if missing) ─────────────────────
-function runMigrations() {
-  try {
-    const db = require('./db').default;
-    // Add ml_signals column to transactions if it doesn't exist
-    try {
-      db.prepare("ALTER TABLE transactions ADD COLUMN ml_signals TEXT").run();
-      console.log('✓ Migration: added ml_signals column');
-    } catch {
-      // Column already exists — ignore
-    }
-  } catch (err) {
-    console.error('Migration error:', err);
-  }
-}
-
-runMigrations();
-
 app.listen(PORT, () => {
   console.log(`\n🚀 LedgerLine API running on http://localhost:${PORT}`);
   console.log(`   Real-time SSE: http://localhost:${PORT}/api/events`);
-  console.log(`   Health check:  http://localhost:${PORT}/health\n`);
+  console.log(`   Health check:  http://localhost:${PORT}/health`);
+  console.log(`   Allowed origins: *.vercel.app + [${explicitOrigins.join(', ') || 'none configured'}]\n`);
 });
