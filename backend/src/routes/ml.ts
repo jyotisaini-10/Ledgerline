@@ -42,7 +42,7 @@ router.post('/analyze', authenticateToken, async (req: any, res) => {
          SET is_subscription = $1, subscription_confidence = $2, ml_signals = $3, updated_at = CURRENT_TIMESTAMP
          WHERE id = $4 AND user_id = $5`,
         [
-          result.is_subscription ? 1 : 0,
+          result.is_subscription, // PostgreSQL boolean: true/false
           result.confidence,
           JSON.stringify(result.signals),
           result.transaction_id,
@@ -61,7 +61,7 @@ router.post('/analyze', authenticateToken, async (req: any, res) => {
          SET is_anomaly = $1, anomaly_score = $2, anomaly_confidence = $3, risk_level = $4, ml_signals = $5, updated_at = CURRENT_TIMESTAMP
          WHERE id = $6 AND user_id = $7`,
         [
-          result.is_anomaly ? 1 : 0,
+          result.is_anomaly, // PostgreSQL boolean: true/false
           result.anomaly_score,
           result.confidence,
           result.risk_level,

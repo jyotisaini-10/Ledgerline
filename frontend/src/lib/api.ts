@@ -4,11 +4,7 @@
  */
 
 const PRODUCTION_API = 'https://ledgerline-4lnt.onrender.com';
-const BASE = process.env.NEXT_PUBLIC_API_URL
-  ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '') // strip trailing slash if any
-  : (typeof window !== 'undefined' && window.location.hostname !== 'localhost')
-    ? PRODUCTION_API   // running on Vercel — use Render
-    : 'http://localhost:5000'; // local dev
+const BASE = (process.env.NEXT_PUBLIC_API_URL || PRODUCTION_API).replace(/\/$/, '');
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;

@@ -17,25 +17,25 @@ router.get('/', authenticateToken, async (req: any, res) => {
     if (is_anomaly !== undefined) {
       paramIndex++;
       queryText += ` AND is_anomaly = $${paramIndex}`;
-      params.push(is_anomaly === 'true' ? 1 : 0);
+      params.push(is_anomaly === 'true'); // PostgreSQL boolean: true/false not 1/0
     }
 
     if (is_subscription !== undefined) {
       paramIndex++;
       queryText += ` AND is_subscription = $${paramIndex}`;
-      params.push(is_subscription === 'true' ? 1 : 0);
+      params.push(is_subscription === 'true'); // PostgreSQL boolean
     }
 
     if (search) {
       paramIndex++;
-      queryText += ` AND (merchant_name LIKE $${paramIndex}`;
+      queryText += ` AND (merchant_name ILIKE $${paramIndex}`; // ILIKE = case-insensitive
       const searchPattern = `%${search}%`;
       params.push(searchPattern);
       paramIndex++;
-      queryText += ` OR category LIKE $${paramIndex}`;
+      queryText += ` OR category ILIKE $${paramIndex}`;
       params.push(searchPattern);
       paramIndex++;
-      queryText += ` OR description LIKE $${paramIndex})`;
+      queryText += ` OR description ILIKE $${paramIndex})`;
       params.push(searchPattern);
     }
 
@@ -63,8 +63,8 @@ router.get('/stats/summary', authenticateToken, async (req: any, res) => {
     const result = await query(
       `SELECT 
         COUNT(*) as total_transactions,
-        SUM(CASE WHEN is_subscription = 1 THEN 1 ELSE 0 END) as subscription_count,
-        SUM(CASE WHEN is_anomaly = 1 THEN 1 ELSE 0 END) as anomaly_count,
+        COUNT(*) FILTER (WHERE is_subscription = true) as subscription_count,
+        COUNT(*) FILTER (WHERE is_anomaly = true) as anomaly_count,
         SUM(amount) as total_spent,
         AVG(amount) as avg_transaction_amount
        FROM transactions 
