@@ -15,7 +15,7 @@ export interface SSEAlert {
 // Mirror the same logic as api.ts — production uses Render, local uses localhost
 const SSE_BASE =
   typeof window !== 'undefined' && window.location.hostname !== 'localhost'
-    ? 'https://ledgerline-4lnt.onrender.com'
+    ? 'https://ledgerline-mmj5.onrender.com'
     : 'http://localhost:5000';
 
 /**
